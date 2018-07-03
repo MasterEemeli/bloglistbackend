@@ -10,21 +10,39 @@ blogsRouter.get('/', async (request, response) => {
 
 blogsRouter.delete('/:id', async (request, response) => {
     try {
-    
-        const user = await User.findById(request.body.user)
 
-        if (!request.token) {
-            return response.status(401).json({ error: 'token missing' })
+        console.log('request.body:')
+        console.log(request.body)
+
+        console.log('request.body.user:')
+        console.log(request.body.user)
+
+        console.log('blog:')
+        console.log(blog)
+
+        if (blog.user === null) {
+            await blog.remove()
         }
 
-        const decodedToken = jwt.verify(request.token, process.env.SECRET)
+        const token = request.token
+        const decodedToken = jwt.verify(token, process.env.SECRET)
 
-        if (user.id !== decodedToken.id) {
-            return response.status(401).json({ error: 'wrong user' })
+        if (!token || !decodedToken.id) {
+            return response.status(401).json({ error: 'token missing or invalid' })
         }
-              
-        await Blog.findByIdAndRemove(request.params.id)
+
+        console.log(blog.user, decodedToken.id)
+
+        if (decodedToken.id.toString() !== blog.user.toString()) {
+            return response.status(400).json({ error: 'only creator can delete a blog' })
+        }
+
+        if (blog) {
+            await blog.remove()
+        }
+
         response.status(204).end()
+
     } catch (exception) {
         console.log(exception)
         response.status(400).send({ error: 'malformatted id' })
@@ -33,6 +51,9 @@ blogsRouter.delete('/:id', async (request, response) => {
 
 blogsRouter.post('/', async (request, response) => {
     try {
+
+        console.log('request.body:')
+        console.log(request.body)
 
         const decodedToken = jwt.verify(request.token, process.env.SECRET)
 
@@ -48,14 +69,14 @@ blogsRouter.post('/', async (request, response) => {
             return response.status(400).json({ error: 'url missing' })
         }
 
-        const user = await User.findById(request.body.user)
+        const user = await User.findById(decodedToken.id)
 
         let blog = new Blog({
             title: request.body.title,
             author: request.body.author,
             url: request.body.url,
             likes: request.body.likes,
-            user: user
+            user: user.id
         })
 
         if (request.body.likes === undefined) {
@@ -65,8 +86,7 @@ blogsRouter.post('/', async (request, response) => {
         const savedBlog = await blog.save()
         user.blogs = user.blogs.concat(savedBlog._id)
         await user.save()
-        response.json(Blog.format(blog))
-
+        response.status(201).json(Blog.format(blog))
     } catch (exception) {
         console.log(exception)
         response.status(500).json({ error: 'something went wrong...' })
@@ -84,7 +104,7 @@ blogsRouter.put('/:id', (request, response) => {
 
     Blog.findByIdAndUpdate(request.params.id, blog, { new: true })
         .then(updatedBlog => {
-            response.json(formatBlog(updatedBlog))
+            response.json(Blog.format(updatedBlog))
         })
 })
 
